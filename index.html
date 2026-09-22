@@ -1,0 +1,1417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>NFC Tap &amp; Pay</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  :root {
+    --green-900: #064e3b;
+    --green-800: #065f46;
+    --green-700: #047857;
+    --green-600: #059669;
+    --green-500: #10b981;
+    --green-300: #6ee7b7;
+    --green-100: #d1fae5;
+    --green-50:  #ecfdf5;
+    --red-600:   #dc2626;
+    --red-100:   #fee2e2;
+    --amber-600: #d97706;
+    --blue-600:  #0284c7;
+  }
+
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(180deg, #ecfdf5 0%, #f0fdf4 40%, #f7fefb 100%);
+    background-attachment: fixed;
+    color: #14251f;
+    padding: 16px;
+    min-height: 100vh;
+  }
+
+  .container { max-width: 660px; margin: 0 auto; padding-bottom: 40px; }
+
+  h1 {
+    font-size: 22px; margin: 6px 0 4px; text-align: center;
+    color: var(--green-900); letter-spacing: -0.3px;
+  }
+  .subtitle {
+    text-align: center; color: #4b7a68; font-size: 13px; margin: 0 0 18px;
+  }
+  .hidden { display: none !important; }
+
+  /* ---------- Buttons ---------- */
+  button { font-family: inherit; cursor: pointer; border: none;
+           transition: filter .15s, transform .05s, background .15s; }
+  button:active { transform: scale(0.98); }
+
+  .btn-main {
+    display: block; width: 100%; padding: 18px;
+    font-size: 17px; font-weight: 700; border-radius: 14px;
+    background: linear-gradient(180deg, var(--green-500) 0%, var(--green-600) 100%);
+    color: #fff; box-shadow: 0 4px 14px rgba(5,150,105,.35);
+    letter-spacing: .2px;
+  }
+  .btn-main:hover { filter: brightness(1.05); }
+  .btn-main.stop {
+    background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
+    box-shadow: 0 4px 14px rgba(220,38,38,.35);
+  }
+  .btn-main:disabled { background: #cbd5d1; color: #f4fbf8;
+                       box-shadow: none; cursor: not-allowed; filter: none; }
+
+  .btn-ghost {
+    padding: 12px 16px; border-radius: 10px;
+    background: var(--green-50); color: var(--green-800);
+    border: 1px solid var(--green-100);
+    font-weight: 700; font-size: 14px;
+  }
+  .btn-ghost:hover { background: var(--green-100); }
+
+  /* ---------- Status ---------- */
+  .status {
+    margin-top: 14px; padding: 14px 16px; border-radius: 12px;
+    background: var(--green-50); border: 1px solid var(--green-100);
+    color: var(--green-800); font-size: 14px; text-align: center;
+    line-height: 1.45; min-height: 50px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: background .2s, border-color .2s, color .2s;
+  }
+  .status.ok    { background: var(--green-100); border-color: var(--green-300); color: var(--green-900); }
+  .status.warn  { background: #fef9c3; border-color: #fde68a; color: #854d0e; }
+  .status.error { background: var(--red-100); border-color: #fecaca; color: #991b1b; }
+  .status.busy  { background: #e0f2fe; border-color: #bae6fd; color: #075985; }
+
+  .spinner {
+    width: 16px; height: 16px; border: 2.5px solid rgba(5,150,105,.22);
+    border-top-color: var(--green-600); border-radius: 50%;
+    animation: spin .75s linear infinite; flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- Panels ---------- */
+  .panel {
+    background: #fff; border-radius: 16px; padding: 18px; margin-top: 16px;
+    border: 1px solid var(--green-100);
+    box-shadow: 0 2px 12px rgba(6,78,59,.07);
+    animation: fadeIn .25s ease;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .panel h2 {
+    font-size: 13px; margin: 0 0 14px; color: var(--green-900);
+    display: flex; align-items: center; gap: 8px;
+    text-transform: uppercase; letter-spacing: .7px; font-weight: 800;
+  }
+  .panel h2::before {
+    content: ""; width: 9px; height: 9px; border-radius: 50%;
+    background: var(--green-500);
+    box-shadow: 0 0 0 3px rgba(16,185,129,.18); flex-shrink: 0;
+  }
+  .panel h2.err::before  { background: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,.18); }
+  .panel h2.warn::before { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,.18); }
+
+  .note { font-size: 12px; color: #6b8f80; margin: 10px 0 0; line-height: 1.5; }
+
+  /* ---------- Catalog ---------- */
+  .catalog-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+  }
+  @media (min-width: 480px) { .catalog-grid { grid-template-columns: repeat(3, 1fr); } }
+
+  .product {
+    position: relative; text-align: left; padding: 12px 11px;
+    border-radius: 13px; background: var(--green-50);
+    border: 1.5px solid var(--green-100); color: var(--green-900);
+    display: flex; flex-direction: column; gap: 5px; min-height: 100px;
+    transition: border-color .15s, background .15s, box-shadow .15s;
+  }
+  .product:disabled { opacity: .55; cursor: not-allowed; }
+  .product:not(:disabled):hover { border-color: var(--green-300); background: #fff; }
+  .product.selected {
+    background: #fff; border-color: var(--green-600);
+    box-shadow: 0 0 0 3px rgba(16,185,129,.18);
+  }
+  .product .icon { font-size: 20px; line-height: 1; }
+  .product .name { font-size: 12.5px; font-weight: 700; line-height: 1.25; }
+  .product .price {
+    font-size: 12.5px; font-weight: 700; color: var(--green-700);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    margin-top: auto;
+  }
+  .product .tag {
+    position: absolute; top: 8px; right: 8px;
+    font-size: 8.5px; font-weight: 800; letter-spacing: .5px;
+    text-transform: uppercase; padding: 3px 6px; border-radius: 999px;
+    background: var(--green-100); color: var(--green-800);
+  }
+  .product .tag.service { background: #e0f2fe; color: #075985; }
+
+  .custom-amount {
+    margin-top: 12px; display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px; border-radius: 12px;
+    background: var(--green-50); border: 1.5px solid var(--green-100);
+  }
+  .custom-amount span { font-weight: 800; color: var(--green-800); font-size: 16px; }
+  .custom-amount input {
+    flex: 1; min-width: 0; border: none; background: transparent;
+    font-size: 17px; font-weight: 700;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    color: var(--green-900); outline: none;
+  }
+  .custom-amount input::placeholder { color: #a9c4b8; font-weight: 500; }
+
+  .amount-bar {
+    margin-top: 14px; padding: 14px 16px; border-radius: 12px;
+    background: linear-gradient(135deg, var(--green-700) 0%, var(--green-600) 100%);
+    display: flex; justify-content: space-between; align-items: center;
+    color: #fff; box-shadow: 0 4px 14px rgba(4,120,87,.25);
+  }
+  .amount-bar .lbl {
+    font-size: 12px; letter-spacing: .8px; text-transform: uppercase;
+    font-weight: 700; opacity: .82;
+  }
+  .amount-bar .val {
+    font-size: 24px; font-weight: 800;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    letter-spacing: -0.5px;
+  }
+
+  /* ---------- Step Checklist ---------- */
+  .steps-list { display: flex; flex-direction: column; gap: 8px; }
+  .step-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 14px; border-radius: 11px;
+    background: var(--green-50); border: 1px solid var(--green-100);
+    transition: background .2s, border-color .2s;
+  }
+  .step-row.running {
+    background: #e0f2fe; border-color: #bae6fd;
+  }
+  .step-row.ok {
+    background: var(--green-100); border-color: var(--green-300);
+  }
+  .step-row.fail {
+    background: var(--red-100); border-color: #fecaca;
+  }
+  .step-num {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--green-600); color: #fff;
+    font-weight: 800; font-size: 13px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .step-row.running .step-num { background: var(--blue-600); }
+  .step-row.ok      .step-num { background: var(--green-600); }
+  .step-row.fail    .step-num { background: var(--red-600); }
+  .step-label {
+    flex: 1; font-size: 13.5px; font-weight: 700; color: var(--green-900);
+  }
+  .step-status {
+    font-size: 14px; font-weight: 800;
+    color: #94a3b8; letter-spacing: .3px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .step-row.running .step-status { color: var(--blue-600); }
+  .step-row.ok      .step-status { color: var(--green-700); }
+  .step-row.fail    .step-status { color: var(--red-600); }
+  .step-status .tiny-spinner {
+    width: 13px; height: 13px;
+    border: 2px solid rgba(2,132,199,.22);
+    border-top-color: var(--blue-600);
+    border-radius: 50%; animation: spin .7s linear infinite;
+  }
+
+  /* ---------- Field rows ---------- */
+  .field {
+    display: flex; justify-content: space-between; gap: 12px;
+    padding: 9px 0; border-bottom: 1px dashed #e6f4ee;
+    font-size: 13.5px; word-break: break-word;
+  }
+  .field:last-child { border-bottom: none; }
+  .label { color: #5b8272; flex-shrink: 0; }
+  .value {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    color: var(--green-900); text-align: right;
+    word-break: break-all; font-weight: 700;
+  }
+  .value.muted { color: #94a3b8; font-weight: 400; }
+
+  /* ---------- Credential card ---------- */
+  .cred {
+    border-radius: 14px;
+    background: linear-gradient(160deg, var(--green-700) 0%, var(--green-600) 55%, #0ea371 100%);
+    color: #fff; padding: 14px 18px 10px;
+    box-shadow: 0 6px 20px rgba(4,120,87,.28);
+  }
+  .cred-title {
+    font-size: 10.5px; letter-spacing: 1.4px; text-transform: uppercase;
+    opacity: .78; margin-bottom: 10px;
+  }
+  .cred-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 12px; padding: 7px 0;
+    border-bottom: 1px solid rgba(255,255,255,.16);
+  }
+  .cred-row:last-child { border-bottom: none; }
+  .cred-label { font-size: 11.5px; opacity: .82; letter-spacing: .4px; }
+  .cred-value {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 16px; font-weight: 700; letter-spacing: 1.1px;
+    text-align: right; word-break: break-all;
+  }
+  .cred-value.big { font-size: 19px; letter-spacing: 1.8px; }
+
+  /* ---------- PIN ---------- */
+  .pin-boxes {
+    display: flex; justify-content: center; gap: 12px;
+    margin: 4px 0 16px;
+  }
+  .pin-box {
+    width: 56px; height: 64px; text-align: center;
+    font-size: 26px; font-weight: 800;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    border-radius: 14px; border: 2px solid var(--green-100);
+    background: var(--green-50); color: var(--green-900);
+    outline: none; padding: 0;
+    transition: border-color .15s, background .15s, box-shadow .15s;
+    -webkit-text-security: disc;
+  }
+  .pin-box:focus {
+    border-color: var(--green-600); background: #fff;
+    box-shadow: 0 0 0 4px rgba(16,185,129,.15);
+  }
+  .pin-box.filled { border-color: var(--green-500); background: #fff; }
+  .pin-box:disabled { opacity: .5; }
+
+  .attempts {
+    text-align: center; font-size: 12.5px;
+    color: #6b8f80; margin-bottom: 14px; font-weight: 600;
+  }
+  .attempts b { color: var(--green-800); }
+
+  /* ---------- Result ---------- */
+  .result-hero { text-align: center; padding: 8px 0 16px; }
+  .result-icon {
+    width: 68px; height: 68px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 34px; margin-bottom: 12px;
+    animation: pop .35s cubic-bezier(.2,1.4,.5,1);
+  }
+  @keyframes pop {
+    0%   { transform: scale(.4); opacity: 0; }
+    100% { transform: scale(1);  opacity: 1; }
+  }
+  .result-icon.ok  { background: var(--green-100); color: var(--green-700);
+                     box-shadow: 0 0 0 8px rgba(16,185,129,.12); }
+  .result-icon.bad { background: var(--red-100); color: var(--red-600);
+                     box-shadow: 0 0 0 8px rgba(239,68,68,.12); }
+
+  .result-title {
+    font-size: 20px; font-weight: 800; margin-bottom: 6px; color: var(--green-900);
+  }
+  .result-title.bad { color: #991b1b; }
+  .result-sub { font-size: 13.5px; color: #5b8272; line-height: 1.5; }
+  .amount-hero {
+    margin: 14px 0 4px; font-size: 32px; font-weight: 800;
+    color: var(--green-700);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    letter-spacing: -1px;
+  }
+  .error-code {
+    display: inline-block; margin-top: 8px; padding: 4px 10px;
+    border-radius: 8px; background: var(--red-100); color: #991b1b;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 11.5px; font-weight: 800; letter-spacing: .5px;
+  }
+  .actions-row { display: flex; gap: 10px; margin-top: 14px; }
+  .actions-row button { flex: 1; }
+
+  .hint {
+    margin-top: 24px; font-size: 12.5px; color: #6b8f80;
+    text-align: center; line-height: 1.7;
+  }
+  .hint code {
+    background: var(--green-100); color: var(--green-800);
+    padding: 1px 6px; border-radius: 5px; font-size: 12px;
+  }
+
+  .tap-prompt {
+    text-align: center; padding: 26px 16px; margin-top: 16px;
+    border-radius: 16px; background: #fff;
+    border: 2px dashed var(--green-300);
+  }
+  .tap-prompt .wave {
+    font-size: 42px; display: block; margin-bottom: 8px;
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1);   opacity: 1; }
+    50%      { transform: scale(1.1); opacity: .85; }
+  }
+  .tap-prompt .txt {
+    font-size: 15px; font-weight: 700; color: var(--green-800); margin-bottom: 4px;
+  }
+  .tap-prompt .sub { font-size: 12.5px; color: #6b8f80; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <h1>💳 NFC Tap &amp; Pay</h1>
+  <p class="subtitle">1. Pick item &nbsp;·&nbsp; 2. Tap card &nbsp;·&nbsp; 3. Enter PIN</p>
+
+  <!-- ============ STEP 1: PRODUCT ============ -->
+  <div class="panel" id="productPanel">
+    <h2>Select Product / Service</h2>
+    <div class="catalog-grid" id="catalogGrid"></div>
+    <div class="custom-amount hidden" id="customRow">
+      <span>₦</span>
+      <input id="customInput" type="text" inputmode="numeric" placeholder="Enter amount" autocomplete="off">
+    </div>
+    <div class="amount-bar">
+      <span class="lbl">Amount</span>
+      <span class="val" id="amountValue">₦0</span>
+    </div>
+  </div>
+
+  <!-- ============ SCAN TRIGGER ============ -->
+  <button id="startBtn" class="btn-main" style="margin-top:16px;">Start Scanning</button>
+  <div id="status" class="status">Press Start, then tap a card</div>
+
+  <!-- ============ STEPS ============ -->
+  <div class="panel hidden" id="stepsPanel">
+    <h2>Card Check</h2>
+    <div class="steps-list">
+      <div class="step-row" id="stepRow1">
+        <span class="step-num">1</span>
+        <span class="step-label">RGC1 payload on tag</span>
+        <span class="step-status" id="stepStatus1">○</span>
+      </div>
+      <div class="step-row" id="stepRow2">
+        <span class="step-num">2</span>
+        <span class="step-label">Supabase card lookup</span>
+        <span class="step-status" id="stepStatus2">○</span>
+      </div>
+      <div class="step-row" id="stepRow3">
+        <span class="step-num">3</span>
+        <span class="step-label">Payment API verification</span>
+        <span class="step-status" id="stepStatus3">○</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ CARD SUMMARY ============ -->
+  <div class="panel hidden" id="cardPanel">
+    <h2>Card Details</h2>
+    <div class="cred" id="cardCred"></div>
+    <div id="cardExtra"></div>
+  </div>
+
+  <!-- ============ PIN ============ -->
+  <div class="panel hidden" id="pinPanel">
+    <h2>Enter Card PIN</h2>
+    <div class="attempts" id="pinAttempts">Enter the 4-digit card PIN</div>
+    <div class="pin-boxes" id="pinBoxes">
+      <input class="pin-box" type="password" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="PIN digit 1">
+      <input class="pin-box" type="password" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="PIN digit 2">
+      <input class="pin-box" type="password" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="PIN digit 3">
+      <input class="pin-box" type="password" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="PIN digit 4">
+    </div>
+    <button class="btn-main" id="payBtn" disabled>Pay</button>
+    <div class="actions-row">
+      <button class="btn-ghost" id="cancelPinBtn">Cancel</button>
+    </div>
+  </div>
+
+  <!-- ============ RESULT ============ -->
+  <div class="panel hidden" id="resultPanel"></div>
+
+  <!-- ============ TAP PROMPT ============ -->
+  <div class="tap-prompt hidden" id="tapPrompt">
+    <span class="wave">📲</span>
+    <div class="txt">Tap the card on the reader</div>
+    <div class="sub">The 3-step check runs automatically</div>
+  </div>
+
+  <p class="hint">
+    Works on Chrome / Edge / Opera for Android over <code>https://</code>.<br>
+    iOS Safari does not support Web NFC.
+  </p>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  /* ============================================================
+     CONFIGURATION
+     ============================================================ */
+  const CONFIG = {
+    // ----- Supabase (card decryption) -----
+    SUPABASE_URL:      "https://lswnskptxfsmacwagool.supabase.co",
+    SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxzd25za3B0eGZzbWFjd2Fnb29sIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NzE1MDA0MywiZXhwIjoyMTAyNzI2MDQzfQ.nkPn6twihu5MYgn7c599izR-h84aYGNMe_iXZS_de0w",
+
+    // ----- NFC Payment API -----
+    PAYMENT_API_BASE:  "https://portalbase.onrender.com",
+    // Hard-coded for this demo. In production this must live server-side only.
+    PAYMENT_API_KEY:   "cp_live_Vi8553Zu2Y7PZ4f0OpxqVoA4nalU9GXqcwBZ4MP1EZA",
+    READER_ID:         "reader-01",
+
+    NDEF_PREFIX:       "RGC1:",
+  };
+
+  /* ============================================================
+     CATALOG
+     ============================================================ */
+  const CATALOG = [
+    { id: "airtime",  name: "Airtime Top-up",  price: 500,  icon: "📱", tag: "Product" },
+    { id: "data1gb",  name: "1GB Data Bundle", price: 1000, icon: "🌐", tag: "Product" },
+    { id: "coffee",   name: "Coffee",          price: 1500, icon: "☕", tag: "Product" },
+    { id: "snack",    name: "Snack Pack",      price: 2500, icon: "🍿", tag: "Product" },
+    { id: "ride",     name: "Ride Fare",       price: 3000, icon: "🚕", tag: "Service" },
+    { id: "laundry",  name: "Laundry Service", price: 4000, icon: "👕", tag: "Service" },
+    { id: "voucher",  name: "Gift Voucher",    price: 5000, icon: "🎁", tag: "Product" },
+    { id: "custom",   name: "Custom Amount",   price: null, icon: "✏️", tag: "Service" },
+  ];
+
+  /* ============================================================
+     DOM
+     ============================================================ */
+  const $ = (id) => document.getElementById(id);
+
+  const startBtn      = $("startBtn");
+  const statusEl      = $("status");
+
+  const productPanel  = $("productPanel");
+  const catalogGrid   = $("catalogGrid");
+  const customRow     = $("customRow");
+  const customInput   = $("customInput");
+  const amountValue   = $("amountValue");
+
+  const stepsPanel    = $("stepsPanel");
+  const stepRow = { 1: $("stepRow1"), 2: $("stepRow2"), 3: $("stepRow3") };
+  const stepSt  = { 1: $("stepStatus1"), 2: $("stepStatus2"), 3: $("stepStatus3") };
+
+  const cardPanel     = $("cardPanel");
+  const cardCred      = $("cardCred");
+  const cardExtra     = $("cardExtra");
+
+  const pinPanel      = $("pinPanel");
+  const pinAttemptsEl = $("pinAttempts");
+  const pinBoxes      = Array.from(document.querySelectorAll(".pin-box"));
+  const payBtn        = $("payBtn");
+  const cancelPinBtn  = $("cancelPinBtn");
+
+  const resultPanel   = $("resultPanel");
+  const tapPrompt     = $("tapPrompt");
+
+  /* ============================================================
+     STATE
+     ============================================================ */
+  const state = {
+    // phase machine: idle | checking | pin | paying | done
+    phase: "idle",
+    busy: false,
+
+    // product
+    product: null,
+    amount: 0,
+
+    // card session (cleared after every transaction)
+    card: null,
+    uidHex: null,
+    paymentReference: null,
+    pinAttempts: 0,
+
+    // scanning
+    scanning: false,
+  };
+
+  /* ============================================================
+     HELPERS
+     ============================================================ */
+  const setStatus = (html, type = "") => {
+    statusEl.innerHTML = html;
+    statusEl.className = "status " + type;
+  };
+
+  const show = (el) => el.classList.remove("hidden");
+  const hide = (el) => el.classList.add("hidden");
+
+  const el = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  };
+
+  const formatNaira = (n) =>
+    "₦" + Number(n || 0).toLocaleString("en-NG", { maximumFractionDigits: 2 });
+
+  const pad = (n, len) => String(n ?? 0).padStart(len, "0");
+
+  const formatExpiry = (month, year) => {
+    const y = String(year ?? "");
+    const yy = y.length >= 4 ? y.slice(-2) : pad(y, 2);
+    return `${pad(month, 2)}/${yy}`;
+  };
+
+  const normalizeUid = (s) =>
+    !s ? "" : String(s).replace(/[^0-9a-fA-F]/g, "").toUpperCase();
+
+  const decodeText = (dv, encoding) => {
+    if (!dv) return "";
+    const enc = String(encoding || "utf-8").toLowerCase();
+    const map = { "utf-8": "utf-8", utf8: "utf-8", "utf-16": "utf-16le", utf16: "utf-16le" };
+    try { return new TextDecoder(map[enc] || enc).decode(dv); }
+    catch { try { return new TextDecoder("utf-8").decode(dv); } catch { return ""; } }
+  };
+
+  const bytesToLatin1 = (dv) => {
+    if (!dv) return "";
+    const b = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
+    let s = "";
+    for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+    return s;
+  };
+
+  const makeRef = () =>
+    `${CONFIG.READER_ID}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const isSupabaseConfigured = () =>
+    CONFIG.SUPABASE_URL && !CONFIG.SUPABASE_URL.includes("YOUR-PROJECT") &&
+    CONFIG.SUPABASE_ANON_KEY && !CONFIG.SUPABASE_ANON_KEY.includes("YOUR-SUPABASE");
+
+  /* ============================================================
+     STEP INDICATOR
+     ============================================================ */
+  function resetSteps() {
+    [1, 2, 3].forEach((n) => {
+      stepRow[n].className = "step-row";
+      stepSt[n].innerHTML = "○";
+    });
+  }
+  function stepRunning(n) {
+    stepRow[n].className = "step-row running";
+    stepSt[n].innerHTML = '<span class="tiny-spinner"></span>checking';
+  }
+  function stepOk(n) {
+    stepRow[n].className = "step-row ok";
+    stepSt[n].innerHTML = "✓ passed";
+  }
+  function stepFail(n) {
+    stepRow[n].className = "step-row fail";
+    stepSt[n].innerHTML = "✕ failed";
+  }
+  function stepSkipped(n) {
+    stepRow[n].className = "step-row";
+    stepSt[n].innerHTML = "— skipped";
+  }
+
+  /* ============================================================
+     SUPABASE RPC
+     ============================================================ */
+  async function supabaseRpc(fnName, args) {
+    if (!isSupabaseConfigured()) {
+      throw new Error("Supabase credentials are not configured in the CONFIG block.");
+    }
+    const res = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/rpc/${fnName}`, {
+      method: "POST",
+      headers: {
+        "apikey":        CONFIG.SUPABASE_ANON_KEY,
+        "Authorization": `Bearer ${CONFIG.SUPABASE_ANON_KEY}`,
+        "Content-Type":  "application/json",
+        "Accept":        "application/json",
+      },
+      body: JSON.stringify(args),
+    });
+    const raw = await res.text();
+    if (!res.ok) throw new Error(`${fnName} → HTTP ${res.status}: ${raw.slice(0, 200)}`);
+    if (!raw) return null;
+    let data;
+    try { data = JSON.parse(raw); } catch { throw new Error(`${fnName} → invalid JSON`); }
+    if (Array.isArray(data)) return data.length ? data[0] : null;
+    return data;
+  }
+
+  const decryptCardPayload = (uidHex, ciphertextHex) =>
+    supabaseRpc("decrypt_card_payload", { p_uid: uidHex, p_ciphertext_hex: ciphertextHex });
+
+  /* ============================================================
+     PAYMENT API
+     ============================================================ */
+  async function paymentApi(method, path, body) {
+    const res = await fetch(CONFIG.PAYMENT_API_BASE + path, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key":    CONFIG.PAYMENT_API_KEY,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    let data = null;
+    const raw = await res.text();
+    if (raw) { try { data = JSON.parse(raw); } catch { /* keep null */ } }
+    return { ok: res.ok, status: res.status, data: data || {} };
+  }
+
+  /* ============================================================
+     NDEF PARSING
+     ============================================================ */
+  function extractCiphertext(records) {
+    if (!records || !records.length) return null;
+
+    for (const rec of records) {
+      let text = null;
+      try {
+        if (rec.recordType === "text") {
+          text = decodeText(rec.data, rec.encoding);
+        } else if (rec.recordType === "mime" &&
+                   (rec.mediaType || "").toLowerCase().startsWith("text/")) {
+          text = decodeText(rec.data, "utf-8");
+        }
+      } catch { /* try next */ }
+
+      if (text && text.includes(CONFIG.NDEF_PREFIX)) {
+        return text
+          .slice(text.indexOf(CONFIG.NDEF_PREFIX) + CONFIG.NDEF_PREFIX.length)
+          .replace(/[^0-9a-fA-F]/g, "").toUpperCase();
+      }
+
+      // brute-force on raw bytes
+      const latin = bytesToLatin1(rec.data);
+      const idx = latin.indexOf(CONFIG.NDEF_PREFIX);
+      if (idx !== -1) {
+        return latin
+          .slice(idx + CONFIG.NDEF_PREFIX.length)
+          .replace(/[^0-9a-fA-F]/g, "").toUpperCase();
+      }
+    }
+    return null;
+  }
+
+  /* ============================================================
+     PRODUCT CATALOG
+     ============================================================ */
+  function renderCatalog() {
+    catalogGrid.innerHTML = "";
+    CATALOG.forEach((p) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "product";
+      btn.dataset.id = p.id;
+
+      btn.appendChild(el("span", "icon", p.icon));
+      btn.appendChild(el("span", "name", p.name));
+      btn.appendChild(el("span", "price", p.price !== null ? formatNaira(p.price) : "Enter amount"));
+      btn.appendChild(el("span", "tag" + (p.tag === "Service" ? " service" : ""), p.tag));
+
+      btn.addEventListener("click", () => selectProduct(p.id));
+      catalogGrid.appendChild(btn);
+    });
+  }
+
+  function selectProduct(id) {
+    // Block product change during a live transaction
+    if (state.phase === "checking" || state.phase === "paying") return;
+
+    const p = CATALOG.find((x) => x.id === id);
+    if (!p) return;
+
+    state.product = p;
+    state.amount = p.price || 0;
+
+    Array.from(catalogGrid.children).forEach((b) =>
+      b.classList.toggle("selected", b.dataset.id === id));
+
+    if (p.price === null) {
+      show(customRow);
+      customInput.value = "";
+      customInput.focus();
+      amountValue.textContent = "₦0";
+    } else {
+      hide(customRow);
+      amountValue.textContent = formatNaira(p.price);
+    }
+
+    refreshIdleStatus();
+  }
+
+  customInput.addEventListener("input", () => {
+    const digits = customInput.value.replace(/[^\d.]/g, "");
+    customInput.value = digits;
+    const val = parseFloat(digits);
+    if (!isNaN(val) && val > 0) {
+      state.amount = val;
+      amountValue.textContent = formatNaira(val);
+    } else {
+      state.amount = 0;
+      amountValue.textContent = "₦0";
+    }
+    refreshIdleStatus();
+  });
+
+  function setCatalogEnabled(on) {
+    Array.from(catalogGrid.children).forEach((b) => (b.disabled = !on));
+    customInput.disabled = !on;
+  }
+
+  /* ============================================================
+     RESET / SESSION
+     ============================================================ */
+  function clearCardSession() {
+    state.card = null;
+    state.uidHex = null;
+    state.paymentReference = null;
+    state.pinAttempts = 0;
+    cardCred.innerHTML = "";
+    cardExtra.innerHTML = "";
+    hide(cardPanel);
+    hide(pinPanel);
+    clearPin();
+  }
+
+  function resetAll({ keepProduct = true } = {}) {
+    clearCardSession();
+    resetSteps();
+    hide(stepsPanel);
+    hide(resultPanel);
+    resultPanel.innerHTML = "";
+
+    if (!keepProduct) {
+      state.product = null;
+      state.amount = 0;
+      Array.from(catalogGrid.children).forEach((b) => b.classList.remove("selected"));
+      hide(customRow);
+      customInput.value = "";
+      amountValue.textContent = "₦0";
+    }
+
+    setCatalogEnabled(true);
+    updateTapPromptVisibility();
+  }
+
+  function refreshIdleStatus() {
+    if (state.phase === "idle" || state.phase === "done") {
+      if (!state.product) {
+        setStatus("Select a product or service to begin.", "warn");
+      } else if (state.amount <= 0) {
+        setStatus("Enter a valid amount.", "warn");
+      } else if (!state.scanning) {
+        setStatus("Press Start, then tap a card.", "");
+      } else {
+        setStatus(`Ready for ${state.product.name} · ${formatNaira(state.amount)} — tap a card.`, "warn");
+      }
+    }
+  }
+
+  function updateTapPromptVisibility() {
+    const shouldShow =
+      state.phase === "idle" && state.scanning && state.product && state.amount > 0;
+    tapPrompt.classList.toggle("hidden", !shouldShow);
+  }
+
+  /* ============================================================
+     RENDER CARD SUMMARY
+     ============================================================ */
+  function renderCardSummary(card) {
+    cardCred.innerHTML = "";
+    cardCred.appendChild(el("div", "cred-title", "Decrypted Card Credentials"));
+
+    const row = (label, value, big) => {
+      const r = el("div", "cred-row");
+      r.appendChild(el("span", "cred-label", label));
+      r.appendChild(el("span", "cred-value" + (big ? " big" : ""), value));
+      cardCred.appendChild(r);
+    };
+
+    const cn = String(card.public_id || "");
+    const masked = cn.length >= 4 ? "•••• •••• •••• " + cn.slice(-4) : cn;
+
+    row("CARD NUMBER", masked, true);
+    row("EXPIRY", formatExpiry(card.expiry_month, card.expiry_year));
+    row("CVC", pad(card.cvc, 5));
+
+    cardExtra.innerHTML = "";
+    const extras = [
+      ["UID", card.__uidHex],
+      ["Activated", card.activated === undefined ? null : (card.activated ? "YES" : "NO")],
+    ].filter(([, v]) => v !== undefined && v !== null && v !== "");
+
+    extras.forEach(([k, v]) => {
+      const f = el("div", "field");
+      f.appendChild(el("span", "label", k));
+      f.appendChild(el("span", "value muted", String(v)));
+      cardExtra.appendChild(f);
+    });
+
+    show(cardPanel);
+  }
+
+  /* ============================================================
+     ============  MAIN FLOW: 3-STEP CHECK ON SCAN  ============
+     ============================================================ */
+  async function handleReading(event) {
+    // Ignore taps during any live transaction
+    if (state.busy || state.phase === "checking" || state.phase === "paying") return;
+
+    // Product must be selected first (needed for step 3 amount)
+    if (!state.product || state.amount <= 0) {
+      setStatus("⚠ Pick a product / enter an amount before tapping the card.", "warn");
+      return;
+    }
+
+    state.busy = true;
+
+    // Fresh session
+    resetAll({ keepProduct: true });
+    state.phase = "checking";
+    setCatalogEnabled(false);
+    hide(tapPrompt);
+    show(stepsPanel);
+    resetSteps();
+
+    const { serialNumber, message } = event;
+    const uidHex = normalizeUid(serialNumber);
+    const records = (message && message.records) ? message.records : [];
+
+    try {
+      /* ---------- STEP 1: RGC1 payload ---------- */
+      stepRunning(1);
+      setStatus('<span class="spinner"></span>Step 1 — reading RGC1 payload…', "busy");
+      await sleep(120); // let the UI paint
+
+      const ciphertextHex = extractCiphertext(records);
+
+      if (!ciphertextHex) {
+        stepFail(1);
+        stepSkipped(2); stepSkipped(3);
+        return finishWithFailure({
+          step: 1,
+          title: "Not a Card Portal Tag",
+          message: "No RGC1 payload was found in the NDEF message.",
+          code: "NO_RGC1_PAYLOAD",
+          hint: "This tag wasn't written by the Card Portal writer, or it's blank.",
+        });
+      }
+      stepOk(1);
+
+      /* ---------- STEP 2: Supabase lookup ---------- */
+      stepRunning(2);
+      setStatus('<span class="spinner"></span>Step 2 — decrypting via Supabase…', "busy");
+
+      let card = null;
+      try {
+        card = await decryptCardPayload(uidHex, ciphertextHex);
+      } catch (err) {
+        stepFail(2);
+        stepSkipped(3);
+        return finishWithFailure({
+          step: 2,
+          title: "Supabase Error",
+          message: err.message || "Could not reach Supabase.",
+          code: "SUPABASE_ERROR",
+          hint: "The card could not be decrypted. Try again or use another card.",
+        });
+      }
+
+      if (!card) {
+        stepFail(2);
+        stepSkipped(3);
+        return finishWithFailure({
+          step: 2,
+          title: "Card Not In Supabase",
+          message: "Supabase could not decrypt this card's payload.",
+          code: "DECRYPT_EMPTY",
+          hint: "The tag may belong to another device, or was never finalized.",
+        });
+      }
+      stepOk(2);
+
+      // Show what we read, even if step 3 fails
+      card.__uidHex = uidHex;
+      renderCardSummary(card);
+
+      /* ---------- STEP 3: Payment API verify ---------- */
+      stepRunning(3);
+      setStatus('<span class="spinner"></span>Step 3 — verifying with payment API…', "busy");
+
+      const ref = makeRef();
+      const verifyBody = {
+        card_number:       String(card.public_id || "").replace(/\D/g, ""),
+        expiry_month:      Number(card.expiry_month),
+        expiry_year:       Number(card.expiry_year),
+        cvc:               pad(card.cvc, 5),
+        amount:            Number(state.amount),
+        currency:          "NGN",
+        payment_reference: ref,
+      };
+
+      let verifyRes;
+      try {
+        verifyRes = await paymentApi("POST", "/api/integrations/nfc/payments/verify", verifyBody);
+      } catch (err) {
+        stepFail(3);
+        return finishWithFailure({
+          step: 3,
+          title: "Verification Error",
+          message: err.message || "Network error reaching payment API.",
+          code: "NETWORK_ERROR",
+          hint: "Check the reader's connection and try again.",
+        });
+      }
+
+      if (!verifyRes.ok || verifyRes.data.status !== "authorized") {
+        stepFail(3);
+        const code = verifyRes.data.code || `HTTP_${verifyRes.status}`;
+        const msg  = verifyRes.data.error || "The card could not be verified for this amount.";
+
+        let hint = "No PIN was requested. Try a different card.";
+        if (code === "PAYMENT_CARD_INVALID")     hint = "Card number / expiry / CVC don't match a linked card.";
+        else if (code === "PAYMENT_CARD_NOT_ACTIVE") hint = "This card is blocked, revoked, or inactive.";
+        else if (code === "INVALID_API_KEY")     hint = "The hard-coded API key in the CONFIG block is wrong.";
+        else if (code === "INVALID_AMOUNT_OR_CURRENCY") hint = "Bad amount or currency sent to the API.";
+
+        return finishWithFailure({
+          step: 3,
+          title: "Card Not Accepted",
+          message: msg,
+          code,
+          hint,
+        });
+      }
+      stepOk(3);
+
+      /* ---------- ALL 3 PASSED → prompt PIN ---------- */
+      state.card = card;
+      state.uidHex = uidHex;
+      state.paymentReference = ref;
+      state.pinAttempts = 0;
+      state.phase = "pin";
+
+      setStatus("✅ Card verified. Ask the cardholder for their 4-digit PIN.", "ok");
+      showPinPanel();
+
+    } finally {
+      state.busy = false;
+    }
+  }
+
+  function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+  /* ============================================================
+     FAILURE HANDLER (single source of truth for card check fails)
+     ============================================================ */
+  function finishWithFailure({ step, title, message, code, hint }) {
+    // Clear the card session so the same tap can't be reused
+    state.card = null;
+    state.uidHex = null;
+    state.paymentReference = null;
+    state.phase = "done";
+    state.busy = false;
+
+    // Hide PIN, hide card summary, hide tap prompt
+    hide(pinPanel);
+    hide(cardPanel);
+    hide(tapPrompt);
+    // Steps stay visible so operator sees exactly where it stopped
+
+    setStatus(`❌ Failed at step ${step}.`, "error");
+    renderFailureResult({ step, title, message, code, hint });
+    setCatalogEnabled(true);
+  }
+
+  function renderFailureResult({ step, title, message, code, hint }) {
+    resultPanel.innerHTML = "";
+
+    const hero = el("div", "result-hero");
+    hero.appendChild(el("div", "result-icon bad", "✕"));
+    hero.appendChild(el("div", "result-title bad", title));
+    hero.appendChild(el("div", "result-sub", message));
+    if (code) {
+      const c = el("div");
+      c.style.marginTop = "8px";
+      c.appendChild(el("span", "error-code", code));
+      hero.appendChild(c);
+    }
+    resultPanel.appendChild(hero);
+
+    const f = el("div", "field");
+    f.appendChild(el("span", "label", "Stopped at"));
+    f.appendChild(el("span", "value", `Step ${step} of 3`));
+    resultPanel.appendChild(f);
+
+    if (hint) {
+      const h = el("div", "field");
+      h.appendChild(el("span", "label", "What next"));
+      h.appendChild(el("span", "value muted", hint));
+      resultPanel.appendChild(h);
+    }
+
+    const actions = el("div", "actions-row");
+    const nextBtn = el("button", "btn-main", "Next Transaction");
+    nextBtn.addEventListener("click", () => {
+      resetAll({ keepProduct: true });
+      state.phase = "idle";
+      refreshIdleStatus();
+      updateTapPromptVisibility();
+    });
+    actions.appendChild(nextBtn);
+    resultPanel.appendChild(actions);
+
+    show(resultPanel);
+  }
+
+  /* ============================================================
+     PIN PANEL
+     ============================================================ */
+  function showPinPanel() {
+    clearPin();
+    updateAttemptsLabel();
+    show(pinPanel);
+    hide(tapPrompt);
+    setTimeout(() => pinBoxes[0].focus(), 120);
+  }
+
+  function updateAttemptsLabel() {
+    const n = state.pinAttempts;
+    if (n === 0) pinAttemptsEl.innerHTML = "Enter the 4-digit card PIN";
+    else pinAttemptsEl.innerHTML = `Wrong PIN — attempt <b>${n + 1}</b> of <b>5</b>`;
+  }
+
+  function clearPin() {
+    pinBoxes.forEach((b) => {
+      b.value = "";
+      b.classList.remove("filled");
+      b.disabled = false;
+    });
+    payBtn.disabled = true;
+  }
+
+  const getPin = () => pinBoxes.map((b) => b.value).join("");
+  const updatePayBtn = () => { payBtn.disabled = getPin().length !== 4; };
+
+  pinBoxes.forEach((box, i) => {
+    box.addEventListener("input", () => {
+      box.value = box.value.replace(/\D/g, "").slice(0, 1);
+      box.classList.toggle("filled", !!box.value);
+      if (box.value && i < pinBoxes.length - 1) pinBoxes[i + 1].focus();
+      updatePayBtn();
+    });
+
+    box.addEventListener("keydown", (e) => {
+      if (e.key === "Backspace") {
+        if (!box.value && i > 0) {
+          pinBoxes[i - 1].value = "";
+          pinBoxes[i - 1].classList.remove("filled");
+          pinBoxes[i - 1].focus();
+          updatePayBtn();
+          e.preventDefault();
+        } else {
+          box.classList.remove("filled");
+        }
+      }
+      if (e.key === "Enter" && getPin().length === 4) submitPin();
+    });
+
+    box.addEventListener("paste", (e) => {
+      e.preventDefault();
+      const txt = (e.clipboardData.getData("text") || "").replace(/\D/g, "").slice(0, 4);
+      txt.split("").forEach((ch, j) => {
+        if (pinBoxes[j]) {
+          pinBoxes[j].value = ch;
+          pinBoxes[j].classList.add("filled");
+        }
+      });
+      const next = Math.min(txt.length, pinBoxes.length - 1);
+      pinBoxes[next].focus();
+      updatePayBtn();
+    });
+  });
+
+  cancelPinBtn.addEventListener("click", () => {
+    // User gave up → end this session entirely. New tap needed.
+    state.phase = "done";
+    state.card = null;
+    state.uidHex = null;
+    state.paymentReference = null;
+    state.pinAttempts = 0;
+    hide(pinPanel);
+    hide(cardPanel);
+    clearPin();
+    setCatalogEnabled(true);
+
+    setStatus("Payment cancelled. Start a new transaction for the next card.", "");
+    resultPanel.innerHTML = "";
+    hide(resultPanel);
+
+    // Steps should also clear
+    hide(stepsPanel);
+    resetSteps();
+    updateTapPromptVisibility();
+  });
+
+  /* ============================================================
+     PAY (PIN submit)
+     ============================================================ */
+  payBtn.addEventListener("click", submitPin);
+
+  async function submitPin() {
+    if (state.busy || state.phase !== "pin") return;
+    const pin = getPin();
+    if (pin.length !== 4) { setStatus("⚠ Enter all 4 digits of the PIN.", "warn"); return; }
+    if (!state.paymentReference) {
+      setStatus("⚠ No active payment. Tap the card again.", "warn");
+      return;
+    }
+
+    state.busy = true;
+    state.phase = "paying";
+    payBtn.disabled = true;
+    payBtn.textContent = "Processing…";
+    pinBoxes.forEach((b) => (b.disabled = true));
+    setStatus('<span class="spinner"></span>Charging card…', "busy");
+
+    try {
+      const res = await paymentApi(
+        "POST",
+        `/api/integrations/nfc/payments/${encodeURIComponent(state.paymentReference)}/pay`,
+        { card_pin: pin }
+      );
+
+      /* ---------- Wrong PIN → retry in place ---------- */
+      if (!res.ok && res.data.code === "PAYMENT_PIN_INVALID") {
+        state.pinAttempts += 1;
+        state.phase = "pin";
+        state.busy = false;
+        payBtn.textContent = "Pay";
+        pinBoxes.forEach((b) => (b.disabled = false));
+        clearPin();
+        updateAttemptsLabel();
+        setStatus("❌ Wrong PIN. Ask the cardholder to try again.", "error");
+        setTimeout(() => pinBoxes[0].focus(), 120);
+        return;
+      }
+
+      /* ---------- Success ---------- */
+      if (res.ok && res.data.status === "captured") {
+        finishWithSuccess(res.data);
+        return;
+      }
+
+      /* ---------- Any other failure → final ---------- */
+      const code = res.data.code || `HTTP_${res.status}`;
+      const msg  = res.data.error || "Payment could not be completed.";
+
+      let hint = "Start a new transaction for the next card.";
+      if (code === "PAYMENT_PIN_LOCKED")               hint = "Too many wrong PINs — card locked 15 minutes.";
+      else if (code === "PAYMENT_INSUFFICIENT_BALANCE") hint = "Cardholder's Expense CBC balance is too low.";
+      else if (code === "PAYMENT_CARD_NOT_ACTIVE")      hint = "The card was blocked or revoked mid-flow.";
+      else if (code === "PAYMENT_NOT_FOUND")            hint = "No verify call found for this reference.";
+      else if (code === "PAYMENT_ALREADY_RELEASED")     hint = "This payment was already released.";
+
+      finishWithPaymentFailure({ title: "Payment Failed", message: msg, code, hint });
+
+    } catch (err) {
+      finishWithPaymentFailure({
+        title: "Payment Error",
+        message: err.message || "Network error reaching payment API.",
+        code: "NETWORK_ERROR",
+        hint: "Check connection, then start a new transaction.",
+      });
+    }
+  }
+
+  /* ============================================================
+     SUCCESS / FINAL RESULT — always resets the card
+     ============================================================ */
+  function finishWithSuccess(data) {
+    // Capture everything we need BEFORE clearing the session
+    const productName = state.product ? state.product.name : "—";
+    const amount      = data.amount;
+    const ref         = data.payment_reference || state.paymentReference;
+    const masked      = data.card_number_masked || "—";
+    const currency    = data.currency || "NGN";
+    const cbc         = data.cbc_amount;
+    const cashback    = data.cashback_points;
+    const duplicate   = data.duplicate;
+
+    // End the session → card data is now gone
+    clearCardSession();
+    hide(stepsPanel);
+    hide(cardPanel);
+    hide(pinPanel);
+    hide(tapPrompt);
+    state.phase = "done";
+    state.busy = false;
+
+    setStatus("✅ Payment successful.", "ok");
+    setCatalogEnabled(true);
+
+    resultPanel.innerHTML = "";
+    const hero = el("div", "result-hero");
+    hero.appendChild(el("div", "result-icon ok", "✓"));
+    hero.appendChild(el("div", "result-title", "Payment Successful"));
+    hero.appendChild(el("div", "amount-hero", formatNaira(amount)));
+    hero.appendChild(el("div", "result-sub", "Cardholder's Expense CBC balance has been debited."));
+    resultPanel.appendChild(hero);
+
+    const fields = [
+      ["Product / Service", productName],
+      ["Payment Reference", ref || "—"],
+      ["Card",              masked],
+      ["Currency",          currency],
+      ["CBC Amount",        cbc != null ? cbc : "—"],
+    ];
+    if (cashback != null) fields.push(["Cashback Points", cashback]);
+    if (duplicate)        fields.push(["Note", "Duplicate reference — original result"]);
+    fields.push(["Next Step", "Tap a new card to start the next transaction"]);
+
+    fields.forEach(([k, v]) => {
+      const f = el("div", "field");
+      f.appendChild(el("span", "label", k));
+      f.appendChild(el("span", "value", String(v)));
+      resultPanel.appendChild(f);
+    });
+
+    const actions = el("div", "actions-row");
+    const nextBtn = el("button", "btn-main", "Next Transaction");
+    nextBtn.addEventListener("click", () => {
+      resetAll({ keepProduct: true });
+      state.phase = "idle";
+      refreshIdleStatus();
+      updateTapPromptVisibility();
+    });
+    actions.appendChild(nextBtn);
+    resultPanel.appendChild(actions);
+
+    show(resultPanel);
+  }
+
+  function finishWithPaymentFailure({ title, message, code, hint }) {
+    clearCardSession();
+    hide(stepsPanel);
+    hide(cardPanel);
+    hide(pinPanel);
+    hide(tapPrompt);
+    state.phase = "done";
+    state.busy = false;
+
+    setStatus("❌ Payment failed.", "error");
+    setCatalogEnabled(true);
+
+    resultPanel.innerHTML = "";
+    const hero = el("div", "result-hero");
+    hero.appendChild(el("div", "result-icon bad", "✕"));
+    hero.appendChild(el("div", "result-title bad", title));
+    hero.appendChild(el("div", "result-sub", message));
+    if (code) {
+      const c = el("div");
+      c.style.marginTop = "8px";
+      c.appendChild(el("span", "error-code", code));
+      hero.appendChild(c);
+    }
+    resultPanel.appendChild(hero);
+
+    if (hint) {
+      const f = el("div", "field");
+      f.appendChild(el("span", "label", "What next"));
+      f.appendChild(el("span", "value muted", hint));
+      resultPanel.appendChild(f);
+    }
+
+    const actions = el("div", "actions-row");
+    const nextBtn = el("button", "btn-main", "Next Transaction");
+    nextBtn.addEventListener("click", () => {
+      resetAll({ keepProduct: true });
+      state.phase = "idle";
+      refreshIdleStatus();
+      updateTapPromptVisibility();
+    });
+    actions.appendChild(nextBtn);
+    resultPanel.appendChild(actions);
+
+    show(resultPanel);
+  }
+
+  /* ============================================================
+     SCAN CONTROL
+     ============================================================ */
+  async function startScan() {
+    if (!("NDEFReader" in window)) {
+      setStatus("❌ Web NFC is not supported. Use Chrome on Android over HTTPS.", "error");
+      return;
+    }
+    if (!isSupabaseConfigured()) {
+      setStatus("❌ Set SUPABASE_URL and SUPABASE_ANON_KEY in the CONFIG block first.", "error");
+      return;
+    }
+
+    try {
+      const ndef = new NDEFReader();
+      window.__ndef = ndef;
+      window.__abort = new AbortController();
+
+      await ndef.scan({ signal: window.__abort.signal });
+
+      state.scanning = true;
+      startBtn.textContent = "Stop Scanning";
+      startBtn.classList.add("stop");
+      setStatus("Scanning… tap a card when the amount is selected.", "warn");
+
+      ndef.onreading = handleReading;
+      ndef.onreadingerror = () => setStatus("⚠ Read error. Move the card and try again.", "error");
+
+      refreshIdleStatus();
+      updateTapPromptVisibility();
+
+    } catch (err) {
+      setStatus("❌ " + (err.message || "Failed to start scanning."), "error");
+      state.scanning = false;
+      startBtn.textContent = "Start Scanning";
+      startBtn.classList.remove("stop");
+    }
+  }
+
+  function stopScan() {
+    if (window.__abort) { try { window.__abort.abort(); } catch {} window.__abort = null; }
+    if (window.__ndef) {
+      window.__ndef.onreading = null;
+      window.__ndef.onreadingerror = null;
+      window.__ndef = null;
+    }
+    state.scanning = false;
+    startBtn.textContent = "Start Scanning";
+    startBtn.classList.remove("stop");
+    setStatus("Scanning stopped.", "");
+    updateTapPromptVisibility();
+  }
+
+  startBtn.addEventListener("click", () => {
+    if (state.scanning) stopScan();
+    else startScan();
+  });
+
+  /* ============================================================
+     BOOT
+     ============================================================ */
+  renderCatalog();
+  resetSteps();
+
+  if (!isSupabaseConfigured()) {
+    setStatus("⚠ Set SUPABASE_URL and SUPABASE_ANON_KEY in the CONFIG block before scanning.", "warn");
+  } else {
+    setStatus("Select a product or service to begin.", "warn");
+  }
+})();
+</script>
+</body>
+</html>
