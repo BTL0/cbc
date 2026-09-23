@@ -397,7 +397,7 @@
       </div>
       <div class="step-row" id="stepRow2">
         <span class="step-num">2</span>
-        <span class="step-label">Supabase card lookup</span>
+        <span class="step-label">Card exists in Supabase</span>
         <span class="step-status" id="stepStatus2">○</span>
       </div>
       <div class="step-row" id="stepRow3">
@@ -642,6 +642,11 @@
     return data;
   }
 
+  // Explicit existence check — returns the card row (or null) from Supabase.
+  const getCardByUid = (uidHex) =>
+    supabaseRpc("get_card_by_uid", { p_uid: uidHex });
+
+  // Decrypt the payload stored on the tag against the card record.
   const decryptCardPayload = (uidHex, ciphertextHex) =>
     supabaseRpc("decrypt_card_payload", { p_uid: uidHex, p_ciphertext_hex: ciphertextHex });
 
@@ -905,8 +910,41 @@
       stepOk(1);
 
       /* ---------- STEP 2: Supabase lookup ---------- */
+      /*   2a. Does the card actually exist in Supabase?                  */
+      /*   2b. Can we decrypt its payload?                                */
       stepRunning(2);
-      setStatus('<span class="spinner"></span>Step 2 — decrypting via Supabase…', "busy");
+      setStatus('<span class="spinner"></span>Step 2 — checking card in Supabase…', "busy");
+
+      /* ----- 2a: existence check ----- */
+      let existingCard = null;
+      try {
+        existingCard = await getCardByUid(uidHex);
+      } catch (err) {
+        stepFail(2);
+        stepSkipped(3);
+        return finishWithFailure({
+          step: 2,
+          title: "Supabase Error",
+          message: err.message || "Could not reach Supabase.",
+          code: "SUPABASE_ERROR",
+          hint: "The card could not be looked up. Try again or use another card.",
+        });
+      }
+
+      if (!existingCard) {
+        stepFail(2);
+        stepSkipped(3);
+        return finishWithFailure({
+          step: 2,
+          title: "Card Not Registered",
+          message: `No card record found for UID ${uidHex || "(unknown)"} in Supabase.`,
+          code: "CARD_NOT_REGISTERED",
+          hint: "This tag isn't linked to a Card Portal account, or it was issued by another device.",
+        });
+      }
+
+      /* ----- 2b: decrypt the payload ----- */
+      setStatus('<span class="spinner"></span>Step 2 — decrypting card payload…', "busy");
 
       let card = null;
       try {
@@ -916,10 +954,10 @@
         stepSkipped(3);
         return finishWithFailure({
           step: 2,
-          title: "Supabase Error",
-          message: err.message || "Could not reach Supabase.",
+          title: "Decryption Failed",
+          message: err.message || "Could not decrypt the card's payload.",
           code: "SUPABASE_ERROR",
-          hint: "The card could not be decrypted. Try again or use another card.",
+          hint: "The card exists but its payload could not be decrypted. Try again.",
         });
       }
 
@@ -928,10 +966,10 @@
         stepSkipped(3);
         return finishWithFailure({
           step: 2,
-          title: "Card Not In Supabase",
-          message: "Supabase could not decrypt this card's payload.",
+          title: "Decryption Failed",
+          message: "Supabase could not decrypt this card's ciphertext.",
           code: "DECRYPT_EMPTY",
-          hint: "The tag may belong to another device, or was never finalized.",
+          hint: "The tag's payload may be corrupt or from a different device.",
         });
       }
       stepOk(2);
@@ -975,9 +1013,9 @@
         const msg  = verifyRes.data.error || "The card could not be verified for this amount.";
 
         let hint = "No PIN was requested. Try a different card.";
-        if (code === "PAYMENT_CARD_INVALID")     hint = "Card number / expiry / CVC don't match a linked card.";
-        else if (code === "PAYMENT_CARD_NOT_ACTIVE") hint = "This card is blocked, revoked, or inactive.";
-        else if (code === "INVALID_API_KEY")     hint = "The hard-coded API key in the CONFIG block is wrong.";
+        if (code === "PAYMENT_CARD_INVALID")           hint = "Card number / expiry / CVC don't match a linked card.";
+        else if (code === "PAYMENT_CARD_NOT_ACTIVE")   hint = "This card is blocked, revoked, or inactive.";
+        else if (code === "INVALID_API_KEY")           hint = "The hard-coded API key in the CONFIG block is wrong.";
         else if (code === "INVALID_AMOUNT_OR_CURRENCY") hint = "Bad amount or currency sent to the API.";
 
         return finishWithFailure({
@@ -1212,7 +1250,7 @@
       const msg  = res.data.error || "Payment could not be completed.";
 
       let hint = "Start a new transaction for the next card.";
-      if (code === "PAYMENT_PIN_LOCKED")               hint = "Too many wrong PINs — card locked 15 minutes.";
+      if (code === "PAYMENT_PIN_LOCKED")                hint = "Too many wrong PINs — card locked 15 minutes.";
       else if (code === "PAYMENT_INSUFFICIENT_BALANCE") hint = "Cardholder's Expense CBC balance is too low.";
       else if (code === "PAYMENT_CARD_NOT_ACTIVE")      hint = "The card was blocked or revoked mid-flow.";
       else if (code === "PAYMENT_NOT_FOUND")            hint = "No verify call found for this reference.";
