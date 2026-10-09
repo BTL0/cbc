@@ -841,7 +841,7 @@
     const cn = String(card.public_id || "");
     const masked = cn.length >= 4 ? "•••• •••• •••• " + cn.slice(-4) : cn;
 
-    row("CARD NUMBER", masked, true);
+    row("CARD NUMBER", cn, true);
     row("EXPIRY", formatExpiry(card.expiry_month, card.expiry_year));
     row("CVC", pad(card.cvc, 5));
 
